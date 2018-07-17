@@ -1,1 +1,2 @@
-# lib-microchip-ateccx08a
+ATECCx08A Device library
+============

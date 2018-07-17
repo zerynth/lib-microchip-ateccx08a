@@ -1,0 +1,21 @@
+{
+    "dependencies": {},
+    "description": "Microchip ATECCx08A support",
+    "fullname": "lib.microchip.ateccx08a",
+    "git_pointer": "zerynth://zerynth-libs/microchip-ateccx08a",
+    "keywords": [
+        "microchip",
+        "crypto",
+        "atecc"
+    ],
+    "repo": "official",
+    "title": "Microchip ATECCx08A Library",
+    "version": "r2.1.2",
+    "whatsnew": "",
+    "info":{
+        "name":"Zerynth Microchip ATECCx08A Library",
+        "type":"Hardware Security",
+        "chip_name":"ATECCx08A",
+        "chip_manufacturer":"microchip"
+    }
+}
