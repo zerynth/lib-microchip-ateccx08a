@@ -104,7 +104,7 @@ Public methods
     This must be done in order to avoid hitting the watchdog timeout (~1 second) which will
     put the device in idle mode no matter what.
         
-..  method:: send_and_read(*args, exec_time=(50,70))
+..  method:: send_and_read(*args)
 
     Send a command and return the result data.
 
@@ -114,11 +114,6 @@ Public methods
         (Default value = 50)
 
     :param *args: All arguments are passed to :meth:`._send_cmd` method.
-    :param exec_time: tuple with typical and maximum number of milliseconds to wait before 
-            the results is ready. See datasheet page 57/8 for commands typical execution time.
-            Current implementation will sleep for typical execution time and poll for the difference
-            between maximum and typical.
-            (Default value = (50,80))
     :type exec_time: int
 --------
 Commands
@@ -255,12 +250,12 @@ code.
 
     :returns: True if the operation completed successfully.
     :rtype: bool
-..  method:: gen_private_key_cmd(self, key_id: bytes, create_digest: bool,                other_data: bytes)
+..  method:: gen_private_key(self, key_slot: int, create_digest=False,                other_data=bytes(3))
 
     Generate an ECC private key.
 
-    :param key_id: Specifies the slot where the private ECC key is generated.
-    :type key_id: bytes
+    :param key_slot: Specifies the slot where the private ECC key is generated.
+    :type key_slot: bytes
     :param create_digest: If True the device creates a PubKey digest based on the
             private key in KeyID and places it in TempKey (ignored if `create_digest` is
             False).
@@ -272,12 +267,12 @@ code.
     :returns: 64 bytes representing public key X and Y coordinates or 1 byte representing
         a status code if an error occured.
     :rtype: bytes
-..  method:: gen_public_key_cmd(self, key_id: bytes, create_digest: bool, other_data: bytes)
+..  method:: gen_public_key(self, key_slot: int, create_digest=False, other_data=bytes(3))
 
     Generate the ECC public key starting from a private key.
 
-    :param key_id: Specifies the slot where the private ECC key is.
-    :type key_id: bytes
+    :param key_slot: Specifies the slot where the private ECC key is.
+    :type key_slot: int
     :param create_digest: If True the device creates a PubKey digest based on the
             private key in KeyID and places it in TempKey (ignored if `create_digest` is
             False).
@@ -736,9 +731,36 @@ code.
     :param mac: Message authentication code to validate address and data.
         (Default value = bytes())
     :type mac: bytes
+..  method:: is_locked(zone: str)
+
+    Check if selected zone has been locked.
+
+    :param zone: Select the zone to check. Must be one of `Config` or `Data`.
+    :type zone: str
+
+    :returns: True if selected zone is locked.
+    :rtype: bool
+..  method:: serial_number()
+
+    Retrieve secure element's 72-bit serial number.
+
+    :returns: Serial number.
+    :rtype: bytes
+=============
+ATECC608A class
+=============
+
+..  class:: ATECC608A(i2c.I2C)
+
+    Class for controlling the ATECC608A chip.
+
+    This class inherits all ATECC508A methods.
+    
 ==========================
 Zerynth HWCrypto Interface
 ==========================
+
+.. _lib.microchip.ateccx08a.hwcryptointerface
 
 ..  function:: hwcrypto_init(i2c_drv, key_slot, i2c_addr=0x60, dev_type=DEV_ATECC508A)
 
@@ -753,5 +775,5 @@ Zerynth HWCrypto Interface
     C interface based on `Microchip Cryptoauth Lib <https://github.com/MicrochipTech/cryptoauthlib>`_.
 
 
-.. node:: ``ATECCx0A_EXCLUDE_PYTHON`` define is available to exclude python code from the compilation process if only the C interface is needed.
+.. node:: ``ATECCx08A_EXCLUDE_PYTHON`` define is available to exclude python code from the compilation process if only the C interface is needed.
     

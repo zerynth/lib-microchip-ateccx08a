@@ -14,7 +14,11 @@ Furthermore an interface to allow the use of chip-related functionalities from o
 
 import i2c
 
-#-if !ATECCx0A_EXCLUDE_PYTHON
+DEV_ATECC108A = 1
+DEV_ATECC508A = 2
+DEV_ATECC608A = 3
+
+#-if !ATECCx08A_EXCLUDE_PYTHON
 
 DEFAULT_ADDR = 0x60
 
@@ -72,7 +76,21 @@ STATUS_CODES = {
     0xFF: "CRC error",
 }
 
+@native_c("_ateccx08a_get_exec_time",
+    [
+        "csrc/ateccx08a_ifc.c", 
+    ],
+    [
+    ],
+    [
+        "-I.../csrc/cryptoauthlib/lib",
+        "-I.../csrc/cryptoauthlib"
+    ]
+)
+def _ateccx08a_get_exec_time(devtype, command):
+    pass
 
+@native_c("_ateccx08a_crc16", [])
 def crc16(data: bytes):
     """
 =================
@@ -89,24 +107,7 @@ Auxiliary methods
     :returns: 2 bytes, representing the computed checksum.
     :rtype: bytes
     """
-    crc_polyn = 0x8005
-    crc_register = 0
-
-    for byte in data:
-        shift_register = 1
-        while shift_register <= 128:
-            data_bit = 1 if (byte & shift_register) else 0
-            crc_bit = crc_register >> 15
-
-            crc_register = (crc_register << 1) & 0xFFFF # Keep only 16 bit
-
-            if (data_bit ^ crc_bit) != 0:
-                crc_register = crc_register ^ crc_polyn
-
-            shift_register <<= 1
-
-    return bytes([crc_register & 0x00FF, crc_register >> 8])
-
+    pass
 
 class ATECC508A(i2c.I2C):
     """
@@ -140,6 +141,8 @@ ATECC508A class
         """
         i2c.I2C.__init__(self, drvname, addr, clk)
         self.start()
+
+        self.devtype = DEV_ATECC508A
 
 
     def _send_cmd(self, opcode, param1, param2: bytes, data=bytes()):
@@ -262,9 +265,9 @@ Public methods
         self.device_awake = False
 
 
-    def send_and_read(self, *args, exec_time=(50,70)):
+    def send_and_read(self, *args):
         """
-        ..  method:: send_and_read(*args, exec_time=(50,70))
+        ..  method:: send_and_read(*args)
 
             Send a command and return the result data.
 
@@ -274,13 +277,9 @@ Public methods
                 (Default value = 50)
 
             :param *args: All arguments are passed to :meth:`._send_cmd` method.
-            :param exec_time: tuple with typical and maximum number of milliseconds to wait before 
-                    the results is ready. See datasheet page 57/8 for commands typical execution time.
-                    Current implementation will sleep for typical execution time and poll for the difference
-                    between maximum and typical.
-                    (Default value = (50,80))
             :type exec_time: int
         """
+        exec_time = _ateccx08a_get_exec_time(args[0], self.devtype) # retrieve exec time shortarray via opcode and device type
 
         is_single_cmd = not self.device_awake
 
@@ -375,7 +374,7 @@ Public methods
             mode |= 0b00000100
 
         data = challenge + response + other_data
-        response = self.send_and_read(OPCODES["CheckMac"], mode, key_id, data, exec_time=(5,13))
+        response = self.send_and_read(OPCODES["CheckMac"], mode, key_id, data)
 
         if len(response) != 1:
             raise InvalidHardwareStatusError
@@ -399,7 +398,7 @@ Public methods
         if key_id != 0 and key_id != 1:
             raise ValueError
 
-        return self.send_and_read(OPCODES["Counter"], 0, bytes([key_id, 0]), exec_time=(5,20))
+        return self.send_and_read(OPCODES["Counter"], 0, bytes([key_id, 0]))
 
 
     def inc_counter_cmd(self, key_id):
@@ -421,7 +420,7 @@ Public methods
         if key_id != 0 and key_id != 1:
             raise ValueError
 
-        return self.send_and_read(OPCODES["Counter"], 1, bytes([key_id, 0]), exec_time=(5,20))
+        return self.send_and_read(OPCODES["Counter"], 1, bytes([key_id, 0]))
 
 
     def derivekey_cmd(self, source_flag: int, target_key: bytes, mac=bytes()):
@@ -454,7 +453,7 @@ Public methods
             raise ValueError
 
         mode = 4 if source_flag == 1 else 0
-        response = self.send_and_read(OPCODES["DeriveKey"], mode, target_key, mac, exec_time=(2,50))
+        response = self.send_and_read(OPCODES["DeriveKey"], mode, target_key, mac)
         return len(response) == 1 and response[0] == 0
 
 
@@ -485,7 +484,7 @@ Public methods
             raise ValueError
 
         data = x_comp + y_comp
-        return self.send_and_read(OPCODES["ECDH"], bytes(1), key_id, data, exec_time=(38,58))
+        return self.send_and_read(OPCODES["ECDH"], bytes(1), key_id, data)
 
 
     def gendig_cmd(self, zone: int, key_id: bytes, other_data=bytes()):
@@ -535,7 +534,7 @@ Public methods
         if other_data and len(other_data) != 4 and len(other_data) != 32:
             raise ValueError
 
-        response = self.send_and_read(OPCODES["GenDig"], zone, key_id, other_data, exec_time=(5,11))
+        response = self.send_and_read(OPCODES["GenDig"], zone, key_id, other_data)
         return len(response) == 1 and response[0] == 0
 
 
@@ -566,7 +565,7 @@ Public methods
         key_id = bytes([key_slot & 0xff, key_slot >> 8])
 
         mode = 0b00001100 if create_digest else 0b00000100
-        return self.send_and_read(OPCODES["GenKey"], mode, key_id, other_data, exec_time=(11,115))
+        return self.send_and_read(OPCODES["GenKey"], mode, key_id, other_data)
 
 
     def gen_public_key(self, key_slot: int, create_digest=False, other_data=bytes(3)):
@@ -595,7 +594,7 @@ Public methods
         key_id = bytes([key_slot & 0xff, key_slot >> 8])
 
         mode = 0b00001000 if create_digest else 0b00000000
-        return self.send_and_read(OPCODES["GenKey"], mode, key_id, other_data, exec_time=(11,115))
+        return self.send_and_read(OPCODES["GenKey"], mode, key_id, other_data)
 
 
     def gen_digest_cmd(self, key_id: bytes, other_data: bytes):
@@ -620,7 +619,7 @@ Public methods
             raise ValueError
 
         mode = 0b00100000
-        return self.send_and_read(OPCODES["GenKey"], mode, key_id, bytes(3), exec_time=(11,115))
+        return self.send_and_read(OPCODES["GenKey"], mode, key_id, bytes(3))
 
 
     def hmac_cmd(self, source_flag: int, key_id: bytes, include_sn: bool):
@@ -654,7 +653,7 @@ Public methods
             mode |= 0b00000100
         if include_sn:
             mode |= 0b01000000
-        return self.send_and_read(OPCODES["HMAC"], mode, key_id, exec_time=(13,23))
+        return self.send_and_read(OPCODES["HMAC"], mode, key_id)
 
 
     def info_cmd(self, zone: str, param=bytes(2)):
@@ -674,7 +673,7 @@ Public methods
             :rtype: bytes
         """
         zone_code = INFO_MODES[zone.lower()]
-        return self.send_and_read(OPCODES["Info"], zone_code, param, exec_time=(1,2))
+        return self.send_and_read(OPCODES["Info"], zone_code, param)
 
 
     def lock_config_zone_cmd(self, checksum: bytes = None):
@@ -696,7 +695,7 @@ Public methods
 
         param = checksum if checksum else bytes(2)
         mode = 0b00000000 if checksum else 0b10000000
-        return self.send_and_read(OPCODES["Lock"], mode, param, exec_time=(8,32))
+        return self.send_and_read(OPCODES["Lock"], mode, param)
 
 
     def lock_data_zone_cmd(self, checksum: bytes = None):
@@ -718,7 +717,7 @@ Public methods
 
         param = checksum if checksum else bytes(2)
         mode = 0b00000001 if checksum else 0b10000001
-        return self.send_and_read(OPCODES["Lock"], mode, param, exec_time=(8,32))
+        return self.send_and_read(OPCODES["Lock"], mode, param)
 
 
     def lock_single_slot_cmd(self, slot_number: int):
@@ -738,7 +737,7 @@ Public methods
             raise ValueError
 
         mode = (slot_number << 2) | 0b00000010
-        return self.send_and_read(OPCODES["Lock"], mode, bytes(2), exec_time=(8,32))
+        return self.send_and_read(OPCODES["Lock"], mode, bytes(2))
 
 
     def mac_cmd(self,
@@ -809,7 +808,7 @@ Public methods
         if include_sn:
             mode |= 0b01000000
 
-        return self.send_and_read(OPCODES["MAC"], mode, key_id, challenge, exec_time=(5,14))
+        return self.send_and_read(OPCODES["MAC"], mode, key_id, challenge)
 
 
     def nonce_cmd(self, use_tempkey: bool, num_in: bytes, force_no_eeprom_update: bool = False):
@@ -847,7 +846,7 @@ Public methods
         if force_no_eeprom_update:
             mode |= 0b00000001
 
-        return self.send_and_read(OPCODES["Nonce"], mode, param, num_in, exec_time=(1,7))
+        return self.send_and_read(OPCODES["Nonce"], mode, param, num_in)
 
 
     def nonce_passthrough_cmd(self, num_in: bytes):
@@ -870,7 +869,7 @@ Public methods
             raise ValueError
 
         mode = 0b00000011
-        return self.send_and_read(OPCODES["Nonce"], mode, bytes(2), num_in, exec_time=(1,7))
+        return self.send_and_read(OPCODES["Nonce"], mode, bytes(2), num_in)
 
 
     def privwrite_cmd(self, encrypt_input: bool, key_id: bytes, value: bytes, mac: bytes):
@@ -915,7 +914,7 @@ Public methods
         if encrypt_input:
             zone |= 0b01000000
         data = value + mac
-        return self.send_and_read(OPCODES['PrivWrite'], zone, key_id, data, exec_time=(1,48))
+        return self.send_and_read(OPCODES['PrivWrite'], zone, key_id, data)
 
 
     def random_cmd(self, force_no_eeprom_update=False):
@@ -939,7 +938,7 @@ Public methods
         if force_no_eeprom_update:
             mode |= 0b00000001
 
-        return self.send_and_read(OPCODES["Random"], mode, bytes(2), exec_time=(1,23))
+        return self.send_and_read(OPCODES["Random"], mode, bytes(2))
 
 
     def read_cmd(self, zone: str, address: bytes, read_32_bytes: bool):
@@ -979,7 +978,7 @@ Public methods
         if read_32_bytes:
             mode |= 0b10000000
 
-        return self.send_and_read(OPCODES["Read"], mode, address, exec_time=(1,2))
+        return self.send_and_read(OPCODES["Read"], mode, address)
 
 
     def sha_start_cmd(self):
@@ -994,7 +993,7 @@ Public methods
         """
         mode = 0b00000000
         length = bytes(2)
-        return self.send_and_read(OPCODES["SHA"], mode, length, exec_time=(7,9))
+        return self.send_and_read(OPCODES["SHA"], mode, length)
 
 
     def sha_hmacstart_cmd(self, key_id: bytes):
@@ -1015,7 +1014,7 @@ Public methods
             raise ValueError
 
         mode = 0b00000100
-        response = self.send_and_read(OPCODES["SHA"], mode, key_id, exec_time=(7,9))
+        response = self.send_and_read(OPCODES["SHA"], mode, key_id)
         return len(response) == 1 and response[0] == 0
 
 
@@ -1039,7 +1038,7 @@ Public methods
 
         mode = 0b00000001
         length = bytes([0b01000000, 0b00000000])
-        response = self.send_and_read(OPCODES["SHA"], mode, length, message, exec_time=(7,9))
+        response = self.send_and_read(OPCODES["SHA"], mode, length, message)
         return len(response) == 1 and response[0] == 0
 
 
@@ -1060,7 +1059,7 @@ Public methods
             raise ValueError
 
         mode = 0b00000011
-        return self.send_and_read(OPCODES["SHA"], mode, key_id, exec_time=(7,9))
+        return self.send_and_read(OPCODES["SHA"], mode, key_id)
 
 
     def sha_end_cmd(self, message: bytes):
@@ -1085,7 +1084,7 @@ Public methods
 
         mode = 0b00000010
         length = bytes([len(message), 0b00000000])
-        return self.send_and_read(OPCODES["SHA"], mode, length, message, exec_time=(7,9))
+        return self.send_and_read(OPCODES["SHA"], mode, length, message)
 
 
     def sha_hmacend_cmd(self, message: bytes):
@@ -1109,7 +1108,7 @@ Public methods
 
         mode = 0b00000101
         length = bytes([len(message), 0b00000000])
-        return self.send_and_read(OPCODES["SHA"], mode, length, message, exec_time=(7,9))
+        return self.send_and_read(OPCODES["SHA"], mode, length, message)
 
 
     def sign_cmd(self,
@@ -1147,7 +1146,7 @@ Public methods
         if use_tempkey:
             mode |= 0b10000000
 
-        return self.send_and_read(OPCODES["Sign"], mode, key_id, exec_time=(42,50))
+        return self.send_and_read(OPCODES["Sign"], mode, key_id)
 
 
     def updateextra_cmd(self, update_byte: int, new_value: int):
@@ -1177,7 +1176,7 @@ Public methods
             mode |= 0b00000001
 
         param = bytes([new_value, 0x00])
-        return self.send_and_read(OPCODES["UpdateExtra"], mode, param, exec_time=(8,10))
+        return self.send_and_read(OPCODES["UpdateExtra"], mode, param)
 
 
     def updateextra_decr_cmd(self, key_id):
@@ -1203,7 +1202,7 @@ Public methods
             raise ValueError
 
         mode = 0b00000010
-        return self.send_and_read(OPCODES["UpdateExtra"], mode, key_id, exec_time=(8,10))
+        return self.send_and_read(OPCODES["UpdateExtra"], mode, key_id)
 
 
     def verify_external_cmd(self,
@@ -1257,7 +1256,7 @@ Public methods
         mode = 0b00000010
         param = bytes([curve_type, 0x00])
         data = r_comp + s_comp + x_comp + y_comp
-        return self.send_and_read(OPCODES["Verify"], mode, param, data, exec_time=(38,58))
+        return self.send_and_read(OPCODES["Verify"], mode, param, data)
 
 
     def verify_stored_cmd(self,
@@ -1296,7 +1295,7 @@ Public methods
 
         mode = 0b00000000
         data = r_comp + s_comp
-        return self.send_and_read(OPCODES["Verify"], mode, key_id, data, exec_time=(38,58))
+        return self.send_and_read(OPCODES["Verify"], mode, key_id, data)
 
 
     def verify_validate_cmd(self,
@@ -1348,7 +1347,7 @@ Public methods
             mode |= 0b00000100
 
         data = r_comp + s_comp + other_data
-        return self.send_and_read(OPCODES["Verify"], mode, key_id, data, exec_time=(38,58))
+        return self.send_and_read(OPCODES["Verify"], mode, key_id, data)
 
 
     def verify_invalidate_cmd(self,
@@ -1396,7 +1395,7 @@ Public methods
 
         mode = 0b00000001
         data = r_comp + s_comp
-        return self.send_and_read(OPCODES["Verify"], mode, key_id, data, exec_time=(38,58))
+        return self.send_and_read(OPCODES["Verify"], mode, key_id, data)
 
 
     def write_cmd(self,
@@ -1443,7 +1442,7 @@ Public methods
             mode |= 0b01000000
 
         data = value + mac
-        return self.send_and_read(OPCODES["Write"], mode, address, data, exec_time=(7,26))
+        return self.send_and_read(OPCODES["Write"], mode, address, data)
 
     def is_locked(self, zone: str):
         """
@@ -1479,13 +1478,25 @@ Public methods
         sn_8  = self.read_cmd('Config', b'\x03\x00', False)[0:1]
         return sn_03 + sn_47 + sn_8
 
+class ATECC608A(ATECC508A):
+    """
+=============
+ATECC608A class
+=============
+
+..  class:: ATECC608A(i2c.I2C)
+
+    Class for controlling the ATECC608A chip.
+
+    This class inherits all ATECC508A methods.
+    """
+    def __init__(self, drvname, addr=DEFAULT_ADDR, clk=100000):
+        ATECC508A.__init__(self, drvname, addr, clk)
+        self.devtype = DEV_ATECC608A
+
 #-endif
 
 #-if ZERYNTH_HWCRYPTO_ATECCx08A
-
-DEV_ATECC108A = 1
-DEV_ATECC508A = 2
-DEV_ATECC608A = 3
 
 @native_c("_cryptoauth_zerynth_hwcrypto_init",
     [
@@ -1496,15 +1507,21 @@ DEV_ATECC608A = 3
         "csrc/cryptoauthlib/lib/basic/*",
         "csrc/cryptoauthlib/lib/atcacert/*",
         "csrc/cryptoauthlib/lib/crypto/*",
+##-if ATECCx08A_INCLUDE_JWT
+        "csrc/cryptoauthlib/lib/jwt/*",
+##-endif
         "csrc/cryptoauthlib/lib/crypto/hashes/*",
         "csrc/cryptoauthlib/lib/hal/atca_hal.c",
         "csrc/cryptoauthlib/lib/hal/hal_zerynth_i2c.c",
         "csrc/cryptoauthlib/lib/hal/hal_zerynth_timer.c",
+##-if !HAS_BUILTIN_MBEDTLS
+        # with builtin mbedtls zhwcrypto is compiled inside Zerynth VM
         "#csrc/tls/mbedtls/library/zhwcrypto.c"
+##-endif
     ],
     [
 ##-if HAS_BUILTIN_MBEDTLS
-#include custom mbetls headers
+#include custom mbedtls headers
     "VHAL_MBEDTLS",
 ##-endif
     "ATCA_HAL_I2C"
@@ -1537,7 +1554,7 @@ Zerynth HWCrypto Interface
     C interface based on `Microchip Cryptoauth Lib <https://github.com/MicrochipTech/cryptoauthlib>`_.
 
 
-.. node:: ``ATECCx0A_EXCLUDE_PYTHON`` define is available to exclude python code from the compilation process if only the C interface is needed.
+.. node:: ``ATECCx08A_EXCLUDE_PYTHON`` define is available to exclude python code from the compilation process if only the C interface is needed.
     """
     pass
 
@@ -1560,5 +1577,11 @@ def write_pubkey(slot, pubkey):
 @native_c("_cryptoauth_read_pubkey", [], [])
 def read_pubkey(slot):
     pass
+
+##-if ATECCx08A_INCLUDE_JWT
+@native_c("_cryptoauth_encode_jwt", ["#csrc/misc/snprintf.c"], [])
+def encode_jwt(iat, exp, aud):
+    pass
+##-endif
 
 #-endif

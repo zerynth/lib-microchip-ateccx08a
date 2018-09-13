@@ -288,14 +288,14 @@ ATCA_STATUS hal_i2c_wake(ATCAIface iface)
 
     atca_delay_ms(2);
 
-    if (bdrt != 100000) {
-        // if not already at 100KHz, change it
-        change_i2c_speed(iface, 100000);
-    }
+    // if (bdrt != 100000) {
+    //     // if not already at 100KHz, change it
+    //     change_i2c_speed(iface, 100000);
+    // }
 
     // init
     vhalI2CConf conf;
-    conf.clock = 100000;
+    conf.clock = cfg->atcai2c.baud;
     conf.addr = (uint16_t)cfg->atcai2c.slave_address;
     conf.sda = i2cpins[bus].sda;
     conf.scl = i2cpins[bus].scl;

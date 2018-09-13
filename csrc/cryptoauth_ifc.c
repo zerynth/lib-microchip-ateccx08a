@@ -2,7 +2,7 @@
 * @Author: lorenzo
 * @Date:   2018-05-18 09:26:35
 * @Last Modified by:   Lorenzo
-* @Last Modified time: 2018-07-11 17:16:38
+* @Last Modified time: 2018-09-04 12:36:54
 */
 
 #define ZERYNTH_PRINTF
@@ -192,6 +192,7 @@ C_NATIVE(_cryptoauth_read_certificate) {
     uint8_t ca_slot;
     PARSE_PY_INT(certificate_slot);
 
+    // cryptoauth_pubca_buffers MUST, if set, be at least ALIGNED(2)
     if (((uint32_t) cryptoauth_pubca_buffers[certificate_slot]) & ((uint32_t) 0x01)) {
         // not a pointer, must extract from slot
         ca_slot = ((uint32_t) cryptoauth_pubca_buffers[certificate_slot]) >> 1;
@@ -279,6 +280,66 @@ C_NATIVE(_cryptoauth_read_pubkey) {
     return ERR_OK;
 }
 
+#if defined(ATECCx08A_INCLUDE_JWT)
+
+#include "jwt/atca_jwt.h"
+
+C_NATIVE(_cryptoauth_encode_jwt) {
+    NATIVE_UNWARN();
+
+    atca_jwt_t jwt;
+    int rv;
+
+    uint32_t iat, exp, aud_len, jwt_buflen;
+    uint8_t *aud, *aud_cstring, *jwt_buf;
+
+    iat = INTEGER_VALUE(args[0]);
+    exp = INTEGER_VALUE(args[1]);
+    args+=2;
+    nargs-=2;
+
+    if (parse_py_args("s", nargs, args, &aud, &aud_len) != 1)
+        return ERR_TYPE_EXC;    
+
+    jwt_buflen = 512;
+    jwt_buf = gc_malloc(jwt_buflen);
+
+    rv = atca_jwt_init(&jwt, jwt_buf, jwt_buflen);
+    if(ATCA_SUCCESS != rv)
+        goto exit;
+
+    if(ATCA_SUCCESS != (rv = atca_jwt_add_claim_numeric(&jwt, "iat", iat)))
+        goto exit;
+
+    if(ATCA_SUCCESS != (rv = atca_jwt_add_claim_numeric(&jwt, "exp", exp)))
+        goto exit;
+
+    aud_cstring = gc_malloc(aud_len);
+    memcpy(aud_cstring, aud, aud_len);
+    aud_cstring[aud_len] = 0;
+
+    if(ATCA_SUCCESS != (rv = atca_jwt_add_claim_string(&jwt, "aud", aud_cstring))) {
+        gc_free(aud_cstring);
+        goto exit;
+    }
+
+    gc_free(aud_cstring);
+    rv = atca_jwt_finalize(&jwt, cryptoauth_hwcrypto_pkeyslot);
+
+exit:
+    if (ATCA_SUCCESS != rv) {
+        gc_free(jwt_buf);
+        *res = MAKE_NONE();
+        return ERR_VALUE_EXC;
+    }
+
+    *res = pstring_new(jwt.cur, jwt_buf);
+    gc_free(jwt_buf);
+
+    return ERR_OK;
+}
+
+#endif
 
 #if 0
 C_NATIVE(_cryptoauth_test) {
