@@ -2,7 +2,7 @@
 * @Author: lorenzo
 * @Date:   2018-05-18 09:26:35
 * @Last Modified by:   Lorenzo
-* @Last Modified time: 2018-09-04 12:36:54
+* @Last Modified time: 2018-10-22 14:30:28
 */
 
 #define ZERYNTH_PRINTF
@@ -120,17 +120,18 @@ C_NATIVE(_cryptoauth_zerynth_hwcrypto_init) {
 
     ATCA_STATUS status = ATCA_SUCCESS;
     int i2c_drv;
-    uint32_t i2c_addr, devtype;
+    uint32_t i2c_addr, devtype, i2c_clock;
 
     zhwcrypto_api_pointers = &cryptoauth_api_pointers;
     zhwcrypto_info         = &cryptoauth_hwinfo;
 
-    if (parse_py_args("iiii", nargs, args, &i2c_drv, &cryptoauth_hwcrypto_pkeyslot, &i2c_addr, &devtype) != 4)
+    if (parse_py_args("iiiii", nargs, args, &i2c_drv, &cryptoauth_hwcrypto_pkeyslot, &i2c_addr, &i2c_clock, &devtype) != 5)
         return ERR_TYPE_EXC;
 
     cfg_ateccx08a_i2c.devtype = devtype;
     cfg_ateccx08a_i2c.atcai2c.slave_address = i2c_addr;
     cfg_ateccx08a_i2c.atcai2c.bus = i2c_drv & 0xff;
+    cfg_ateccx08a_i2c.atcai2c.baud = i2c_clock;
 
     if ((status = atcab_init(&cfg_ateccx08a_i2c)) != ATCA_SUCCESS) {
         return ERR_IOERROR_EXC;

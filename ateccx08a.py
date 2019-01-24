@@ -1533,7 +1533,7 @@ ATECC608A class
         "-I.../csrc/cryptoauthlib/lib",
         "-I.../csrc/cryptoauthlib"
     ])
-def hwcrypto_init(i2c_drv, key_slot, i2c_addr=0x60, dev_type=DEV_ATECC508A):
+def hwcrypto_init(i2c_drv, key_slot, i2c_addr=0x60, i2c_clock=100000, dev_type=DEV_ATECC508A):
     """
 ==========================
 Zerynth HWCrypto Interface
