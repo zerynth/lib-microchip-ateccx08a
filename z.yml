@@ -1,0 +1,14 @@
+---
+description: Microchip ATECCx08A support
+fullname: lib.microchip.ateccx08a
+info:
+    chip_manufacturer: microchip
+    chip_name: ATECCx08A
+    name: Zerynth Microchip ATECCx08A Library
+    type: Hardware Security
+keywords:
+- microchip
+- crypto
+- atecc
+title: Microchip ATECCx08A Library
+...
