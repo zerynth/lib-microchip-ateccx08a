@@ -1514,9 +1514,10 @@ ATECC608A class
         "csrc/cryptoauthlib/lib/hal/atca_hal.c",
         "csrc/cryptoauthlib/lib/hal/hal_zerynth_i2c.c",
         "csrc/cryptoauthlib/lib/hal/hal_zerynth_timer.c",
+        "#csrc/hwcrypto/*",
 ##-if !HAS_BUILTIN_MBEDTLS
         # with builtin mbedtls zhwcrypto is compiled inside Zerynth VM
-        "#csrc/tls/mbedtls/library/zhwcrypto.c"
+        # "#csrc/tls/mbedtls/library/zhwcrypto.c"
 ##-endif
     ],
     [
@@ -1530,6 +1531,7 @@ ATECC608A class
 ##-if !HAS_BUILTIN_MBEDTLS
         "-I#csrc/tls/mbedtls/include",
 ##-endif
+        "-I#csrc/hwcrypto",
         "-I.../csrc/cryptoauthlib/lib",
         "-I.../csrc/cryptoauthlib"
     ])

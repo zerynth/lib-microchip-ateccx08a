@@ -4,11 +4,11 @@
 * @Last Modified by:   Lorenzo
 * @Last Modified time: 2018-10-22 14:30:28
 */
-
-#define ZERYNTH_PRINTF
 #include "zerynth.h"
 #include "zerynth_hwcrypto.h"
 #include "cryptoauthlib.h"
+#include "atecc_debug.h"
+
 
 ATCAIfaceCfg cfg_ateccx08a_i2c = {
     .iface_type             = ATCA_I2C_IFACE,
@@ -23,6 +23,7 @@ ATCAIfaceCfg cfg_ateccx08a_i2c = {
 int cryptoauth_hwcrypto_pkeyslot = -1;
 
 static int cryptoauth_hwcrypto_ec_get_pubkey(uint8_t* public_key) {
+    DEBUG0("Get Public Key %x",public_key);
     return atcab_get_pubkey(cryptoauth_hwcrypto_pkeyslot, public_key);
 }
 
@@ -36,7 +37,9 @@ static int cryptoauth_hwcrypto_ec_get_pubkey(uint8_t* public_key) {
 static int cryptoauth_hwcrypto_digest_sha256( const unsigned char *input, size_t ilen, unsigned char *output ) {
     int status = atcab_sha(ilen, (const uint8_t *)input, output);
     int retries = 20;
+    DEBUG0("Calc SHA256 %x %i %x",input, ilen, output);
     CRYPTOAUTH_RETRY(atcab_sha(ilen, (const uint8_t *)input, output), status, retries);
+    DEBUG0("Calc'd SHA256 %i",status);
     return status;
 }
 
@@ -85,13 +88,14 @@ static int cryptoauth_hwcrypto_ecdsa_secp256r1_sign(const unsigned char *hash, s
                                 unsigned char *sig, size_t *sig_len)
 {
         ATCA_STATUS status = ATCA_SUCCESS;
-
+        DEBUG0("Calling SIGN %x %i %x %x\n",hash,hash_len,sig,sig_len);
         uint8_t raw_sig[64];
         uint8_t der_sig_at[80]; // with tag, length and spare bits
         int sig_offset = 3; // to discard tag, length and spare bits from the result
         *sig_len = 80;
 
         status = atcab_sign(cryptoauth_hwcrypto_pkeyslot, hash, raw_sig);
+        DEBUG0("Called SIGN %i",status);
         atcacert_der_enc_ecdsa_sig_value(raw_sig, der_sig_at, sig_len);
         // discard first elements for atcacert der encoding
         *sig_len -= sig_offset;
@@ -115,6 +119,7 @@ const ZHWCryptoInfo cryptoauth_hwinfo = {
     ZHWCRYPTO_KEY_ECKEY
 };
 
+
 C_NATIVE(_cryptoauth_zerynth_hwcrypto_init) {
     NATIVE_UNWARN();
 
@@ -122,11 +127,13 @@ C_NATIVE(_cryptoauth_zerynth_hwcrypto_init) {
     int i2c_drv;
     uint32_t i2c_addr, devtype, i2c_clock;
 
-    zhwcrypto_api_pointers = &cryptoauth_api_pointers;
-    zhwcrypto_info         = &cryptoauth_hwinfo;
+    // zhwcrypto_api_pointers = &cryptoauth_api_pointers;
+    // zhwcrypto_info         = &cryptoauth_hwinfo;
+
 
     if (parse_py_args("iiiii", nargs, args, &i2c_drv, &cryptoauth_hwcrypto_pkeyslot, &i2c_addr, &i2c_clock, &devtype) != 5)
         return ERR_TYPE_EXC;
+    
 
     cfg_ateccx08a_i2c.devtype = devtype;
     cfg_ateccx08a_i2c.atcai2c.slave_address = i2c_addr;
@@ -136,6 +143,9 @@ C_NATIVE(_cryptoauth_zerynth_hwcrypto_init) {
     if ((status = atcab_init(&cfg_ateccx08a_i2c)) != ATCA_SUCCESS) {
         return ERR_IOERROR_EXC;
     }
+    DEBUG0("Enabling Atecc with slot %i",cryptoauth_hwcrypto_pkeyslot);
+    gzcrypto_hw_init(&cryptoauth_api_pointers,&cryptoauth_hwinfo);
+    gzcrypto_hw_enable();
 
     return ERR_OK;
 }
